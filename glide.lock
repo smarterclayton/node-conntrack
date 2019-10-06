@@ -1,0 +1,61 @@
+hash: 53e1c9569ae4beb59afd5d9bad618100cd4965db8ada382ed4b9ef0c59a283d6
+updated: 2019-10-08T21:10:35.354101-04:00
+imports:
+- name: github.com/beorn7/perks
+  version: 37c8de3658fcb183f997c4e13e8337516ab753e6
+  subpackages:
+  - quantile
+- name: github.com/golang/protobuf
+  version: 1680a479a2cfb3fa22b972af7e36d0a0fde47bf8
+  subpackages:
+  - proto
+- name: github.com/matttproud/golang_protobuf_extensions
+  version: c182affec369e30f25d3eb8cd8a478dee585ae7d
+  subpackages:
+  - pbutil
+- name: github.com/mdlayher/netlink
+  version: 33e636e15db53a2e1853b4cf5e53f4009529f743
+  repo: https://github.com/smarterclayton/netlink
+  subpackages:
+  - nlenc
+- name: github.com/pkg/errors
+  version: 27936f6d90f9c8e1145f11ed52ffffbfdb9e0af7
+- name: github.com/prometheus/client_golang
+  version: 9a37535b1ba53f6216e9c8557559a714e0dbb84a
+  subpackages:
+  - prometheus
+  - prometheus/internal
+  - prometheus/promhttp
+- name: github.com/prometheus/client_model
+  version: 14fe0d1b01d4d5fc031dd4bec1823bd3ebbe8016
+  subpackages:
+  - go
+- name: github.com/prometheus/common
+  version: 287d3e634a1e550c9e463dd7e5a75a422c614505
+  subpackages:
+  - expfmt
+  - internal/bitbucket.org/ww/goautoneg
+  - model
+- name: github.com/prometheus/procfs
+  version: aee14273b394209f45977b2d7a6b730071adf5e2
+  subpackages:
+  - internal/fs
+  - internal/util
+- name: github.com/ti-mo/conntrack
+  version: 0cc2410125fac1528f92149f9a489c6fe631e5ea
+  repo: https://github.com/smarterclayton/conntrack
+- name: github.com/ti-mo/netfilter
+  version: 17a8359e0f9d4ce6f4b44a387ec8edc5faa3d8a2
+  repo: https://github.com/smarterclayton/netfilter
+- name: golang.org/x/net
+  version: 72f939374954d0a1b2a1e27dcda950e2724dd5c1
+  subpackages:
+  - bpf
+- name: golang.org/x/sys
+  version: fde4db37ae7ad8191b03d30d27f258b5291ae4e3
+  subpackages:
+  - unix
+  - windows
+- name: k8s.io/api
+  version: 95b840bb6a1f5f0462af804c8589396d294d4914
+testImports: []

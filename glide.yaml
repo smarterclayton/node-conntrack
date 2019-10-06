@@ -1,0 +1,17 @@
+package: github.com/openshift/sdn
+import:
+package: github.com/smarterclayton/node-conntrack
+import:
+- package: k8s.io/api
+  version: kubernetes-1.16.0
+- package: golang.org/x/sys
+  version: release-branch.go1.13
+
+# uses extensions of these three libraries that expose more
+# efficient read patterns and allow bypassing some logic
+- package: github.com/ti-mo/conntrack
+  repo: https://github.com/smarterclayton/conntrack
+- package: github.com/ti-mo/netfilter
+  repo: https://github.com/smarterclayton/netfilter
+- package: github.com/mdlayher/netlink/
+  repo: https://github.com/smarterclayton/netlink

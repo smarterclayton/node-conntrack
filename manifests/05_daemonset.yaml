@@ -1,0 +1,36 @@
+
+---
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: node-conntrack
+  namespace: openshift-node-conntrack
+spec:
+  selector:
+    matchLabels:
+      k8s-app: node-conntrack
+  template:
+    metadata:
+      labels:
+        k8s-app: node-conntrack
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+      - operator: Exists
+      hostNetwork: true
+      containers:
+      - name: track
+        image: registry.svc.ci.openshift.org/clayton-test-1/node-conntrack:latest
+        securityContext:
+          runAsUser: 0
+          privileged: true
+        resources:
+          requests:
+            memory: 25Mi
+        ports:
+        - containerPort: 9179
+          name: metrics
+        args:
+        - -listen=:9179
+        - -v
