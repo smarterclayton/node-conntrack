@@ -15,12 +15,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-type Event struct {
-	Type      conntrack.EventType
-	TupleOrig conntrack.Tuple
-	Status    conntrack.Status
-}
-
 // Listen connects to the netlink socket and begins listening for Update and Destroy connection events. Failed
 // connections (due to rejections or timeouts) are recorded, while successful connections reset the record.
 // After each interval the current set of records are merged and visible when metrics are collected. The method
@@ -35,14 +29,13 @@ func (t *ConnectionTracker) Listen(ctx context.Context) error {
 		return err
 	}
 
-	workers := uint8(1)
-	eventCh := make(chan Event, 1024*int(workers))
-	// TODO: out of order events
-	dropCounter := gaugeDroppedEvents.WithLabelValues()
+	counter := gaugeEvents.WithLabelValues()
 	filterCounter := gaugeFilteredEvents.WithLabelValues()
+
+	workers := uint8(1)
 	errCh, err := conn.ListenRaw(workers, []netfilter.NetlinkGroup{netfilter.GroupCTDestroy, netfilter.GroupCTUpdate}, func(recv []netlink.Message) error {
 		var flow conntrack.Flow
-		var event Event
+		var eventType conntrack.EventType
 
 		ok, err := netfilter.WalkMessage(
 			recv[0],
@@ -50,10 +43,10 @@ func (t *ConnectionTracker) Listen(ctx context.Context) error {
 				if h.SubsystemID != netfilter.NFSubsysCTNetlink {
 					return false, nil
 				}
-				if err := event.Type.Unmarshal(h); err != nil {
+				if err := eventType.Unmarshal(h); err != nil {
 					return false, err
 				}
-				switch event.Type {
+				switch eventType {
 				case conntrack.EventDestroy, conntrack.EventUpdate:
 					return true, nil
 				default:
@@ -63,7 +56,7 @@ func (t *ConnectionTracker) Listen(ctx context.Context) error {
 			func(attr netfilter.Attribute) (bool, error) {
 				switch conntrack.AttributeType(attr.Type) {
 				case conntrack.CTAStatus:
-					if event.Type != conntrack.EventDestroy {
+					if eventType != conntrack.EventDestroy {
 						return true, nil
 					}
 					if err := flow.Unmarshal([]netfilter.Attribute{attr}); err != nil {
@@ -94,14 +87,36 @@ func (t *ConnectionTracker) Listen(ctx context.Context) error {
 			return nil
 		}
 
-		event.TupleOrig = flow.TupleOrig
-		event.Status = flow.Status
+		switch eventType {
+		case conntrack.EventDestroy:
+			if flow.Status.SeenReply() {
+				filterCounter.Inc()
+				return nil
+			}
+			dst := flow.TupleOrig
+			failures, successes := t.failure(dst.IP.DestinationAddress, dst.Proto.Protocol, dst.Proto.DestinationPort)
+			counter.Inc()
+			if t.args.Log {
+				log.Printf("down ip=%s proto=%d port=%d down=%d up=%d", dst.IP.DestinationAddress, dst.Proto.Protocol, dst.Proto.DestinationPort, failures, successes)
+			}
 
-		select {
-		case eventCh <- event:
+		case conntrack.EventUpdate:
+			dst := flow.TupleOrig
+			failures, successes, ok := t.success(dst.IP.DestinationAddress, dst.Proto.Protocol, dst.Proto.DestinationPort)
+			if !ok {
+				filterCounter.Inc()
+				return nil
+			}
+			counter.Inc()
+			if t.args.Log {
+				log.Printf("up ip=%s proto=%d port=%d down=%d up=%d tracked=%t", dst.IP.DestinationAddress, dst.Proto.Protocol, dst.Proto.DestinationPort, failures, successes, ok)
+			}
+
 		default:
-			dropCounter.Inc()
+			filterCounter.Inc()
+			return nil
 		}
+
 		return nil
 	})
 	if err != nil {
@@ -117,8 +132,8 @@ func (t *ConnectionTracker) Listen(ctx context.Context) error {
 		}
 	}()
 
-	counter := gaugeEvents.WithLabelValues()
 	var errs []error
+	var errBufferFull bool
 	for workers > 0 {
 		select {
 		case err, ok := <-errCh:
@@ -126,60 +141,26 @@ func (t *ConnectionTracker) Listen(ctx context.Context) error {
 				return nil
 			}
 			if err != nil {
-				errs = append(errs, err)
+				switch {
+				case strings.Contains(err.Error(), "recvmsg: no buffer space available"):
+					errBufferFull = true
+				default:
+					errs = append(errs, err)
+				}
 			}
 			workers--
 
 		case <-ctx.Done():
 			workers = 0
 			errs = append(errs, context.Canceled)
-
-		case event, ok := <-eventCh:
-			// we will try to read up to 256 events (if the channel has a backlog) before exiting the core loop
-		Continue:
-			if !ok {
-				workers = 0
-				continue
-			}
-
-			// drop everything except TCP for now
-			switch event.TupleOrig.Proto.Protocol {
-			case unix.IPPROTO_TCP:
-			default:
-				continue
-			}
-			counter.Inc()
-			switch event.Type {
-			case conntrack.EventDestroy:
-				if !event.Status.SeenReply() {
-					dst := event.TupleOrig
-					failures, successes := t.failure(dst.IP.DestinationAddress, dst.Proto.Protocol, dst.Proto.DestinationPort)
-					if t.args.Log {
-						log.Printf("down ip=%s proto=%d port=%d down=%d up=%d", dst.IP.DestinationAddress, dst.Proto.Protocol, dst.Proto.DestinationPort, failures, successes)
-					}
-				}
-			case conntrack.EventUpdate:
-				dst := event.TupleOrig
-				failures, successes, ok := t.success(dst.IP.DestinationAddress, dst.Proto.Protocol, dst.Proto.DestinationPort)
-				if ok {
-					if t.args.Log {
-						log.Printf("up ip=%s proto=%d port=%d down=%d up=%d", dst.IP.DestinationAddress, dst.Proto.Protocol, dst.Proto.DestinationPort, failures, successes)
-					}
-				}
-
-			default:
-				log.Printf("unrecognized event: %s", event.Type)
-			}
-
-			// loop if we can read more events, otherwise go back to the main select
-			if len(eventCh) > 0 {
-				event, ok = <-eventCh
-				goto Continue
-			}
 		}
 	}
 
 	if len(errs) == 0 {
+		if errBufferFull {
+			gaugeBufferFullErrors.WithLabelValues().Inc()
+			return ErrBufferFull
+		}
 		return nil
 	}
 	if len(errs) == 1 {

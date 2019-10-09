@@ -27,6 +27,7 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -57,8 +58,17 @@ func main() {
 		}
 	}()
 
+	log.Printf("Watching for failed TCP connections, metrics served on %s", o.Listen)
 	ctx := context.Background()
-	if err := tracker.Listen(ctx); err != nil {
-		log.Fatal(err)
+	for {
+		err := tracker.Listen(ctx)
+		if err == conntrack.ErrBufferFull {
+			log.Printf("warning: Receive buffer filled up, restarting")
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }

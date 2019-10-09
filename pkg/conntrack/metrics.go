@@ -15,13 +15,13 @@ var (
 		Name: "down_target_connection_event_count",
 		Help: "The count of connection events received by the connection tracker",
 	}, nil)
-	gaugeDroppedEvents = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "down_target_dropped_connection_event_count",
-		Help: "The count of connection events dropped by the connection tracker",
-	}, nil)
 	gaugeFilteredEvents = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "down_target_filtered_connection_event_count",
 		Help: "The count of connection events filtered out by the connection tracker",
+	}, nil)
+	gaugeBufferFullErrors = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "down_target_buffer_full_errors",
+		Help: "The number of times the receive buffer has filled up and we have dropped some events.",
 	}, nil)
 	descTargets = prometheus.NewDesc(
 		"down_target",
@@ -39,8 +39,8 @@ var (
 
 func (t *ConnectionTracker) Describe(ch chan<- *prometheus.Desc) {
 	gaugeEvents.Describe(ch)
-	gaugeDroppedEvents.Describe(ch)
 	gaugeFilteredEvents.Describe(ch)
+	gaugeBufferFullErrors.Describe(ch)
 	ch <- descTargets
 	ch <- descTargetPorts
 }
@@ -55,11 +55,11 @@ var protocols = map[uint8]string{
 
 func (t *ConnectionTracker) Collect(ch chan<- prometheus.Metric) {
 	gaugeEvents.Collect(ch)
-	gaugeDroppedEvents.Collect(ch)
 	gaugeFilteredEvents.Collect(ch)
+	gaugeBufferFullErrors.Collect(ch)
 
-	t.lock.Lock()
-	defer t.lock.Unlock()
+	t.lock.RLock()
+	defer t.lock.RUnlock()
 
 	for dst, state := range t.down {
 		if !state.Up {
