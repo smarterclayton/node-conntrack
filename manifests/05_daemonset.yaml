@@ -22,6 +22,7 @@ spec:
       containers:
       - name: track
         image: registry.svc.ci.openshift.org/clayton-test-1/node-conntrack:latest
+        terminationMessagePolicy: FallbackToLogsOnError
         securityContext:
           runAsUser: 0
           privileged: true

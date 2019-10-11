@@ -184,13 +184,14 @@ func (t *ConnectionTracker) flush() {
 }
 
 func (t *ConnectionTracker) isTrackingIP(ip net.IP) bool {
-	t.lock.RLock()
-	defer t.lock.RUnlock()
 	state, ok := t.down[string(ip)]
 	return ok && !state.Empty()
 }
 
 func (t *ConnectionTracker) failure(ip net.IP, protocol uint8, port uint16) (UIntCounter, UIntCounter) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	state := t.current[string(ip)]
 
 	var changed bool
@@ -212,6 +213,9 @@ func (t *ConnectionTracker) failure(ip net.IP, protocol uint8, port uint16) (UIn
 }
 
 func (t *ConnectionTracker) success(ip net.IP, protocol uint8, port uint16) (UIntCounter, UIntCounter, bool) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	var changed bool
 	state := t.current[string(ip)]
 	if !state.Up {
